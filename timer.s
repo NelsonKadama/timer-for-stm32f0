@@ -71,8 +71,15 @@ TIM6_Handler:
 	STR R2, [R0, #0x10]
     @ END Ack the IRQ.
 	
-	
+	@IF SWITCHED PRESSED, DONT CHANGE VALUE, EXIT TIMER
     LDR R0, GPIOA_BASE_ADDRESS
+	LDR R3, [R0, #0x10]
+	MOVS R1, #1
+	ANDS R3, R3, R1
+	CMP R3, #0
+	BEQ wrapped
+	
+	LDR R0, GPIOA_BASE_ADDRESS
 	LDR R3, [R0, #0x10]
 	MOVS R1, #2
 	ANDS R3, R3, R1
@@ -85,21 +92,19 @@ TIM6_Handler:
     @ If it goes above 0xF8, wrap back to maximum value found in part 2.
     
     STR R4, [R7, #0x14]
-    ADDS R4, R4, #1
-    CMP R4, #0xF9
+    SUBS R4, R4, #1
+    CMP R4, #0
     BEQ back_to_max
-    wrapped:
     
-    
-
+	wrapped:
     POP {PC}  @ take that return code from stack into PC, thereby telling the CPU we want to exit from the ISR
 
     
     
     back_to_max:
-        LDR R0, RAM_START
-        LDRB R4, [R0, R5]
-        B wrapped
+	LDR R0, RAM_START
+	LDRB R4, [R0]
+	B wrapped
     
 _start:
     @ Initliase LEDs
@@ -213,117 +218,55 @@ adc_ready:
     @ read each byte from DATA, add 1 to it and store it to an equivalent block at the start of RAM.
 
     LDR R0, RAM_START
-    LDR R1, DATA_ADDR
-    MOVS R2, #0
-    LDR R5, DATA_END_ADDR
+	LDR R0, ALL_ON
     
-    to_RAM_loop_loop:
-    @ iterate through each
+    to_RAM:
+	LDR R0, RAM_START
+	STRB R4, [R0]
     
-    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    
-    CMP R1, R5
-    BEQ copy_to_RAM_complete
-    SUBS R5, R5, #1
-    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    
-    LDRB R3, [R1, R2]
-    ADDS R3, R3, #1
-    STRB R3, [R0, R2]
-    ADDS R2, R2, #1
-    
-    B to_RAM_loop_loop
-    
-    
-    @ CRITICAL! Here, the automarker will verify and modify the block in RAM.
 copy_to_RAM_complete:
-    @ iterate through each byte in the block which you've copied to RAM, treating it
-    @ as an unsigned value. Find the maximum unsigned value.
-    @ Display it on the LEDs
-    MOVS R5, R2
-    ADDS R5, #1
-    
-    LDRB R3, [R0, R2]
-    SUBS R2, R2, #1
-    LDRB R4, [R0, R2]
-    SUBS R2, R2, #1
-    
-    CMP R3, R4
-    BHI greater
-    
-    PUSH {R4}
-    B check_end
-    
-    greater:
-    PUSH {R3}
-    B check_end
-    
-    check_end:
-    CMP R2, #0
-    BEQ display_maximum
-    POP {R4}        @ R4 has max
-    B compare_max
-    
-    compare_max:
-    LDRB R3, [R0, R2]
-    SUBS R2, R2, #1
-    
-    CMP R3, R4
-    BHI greater
-    
-    CMP R2, #0
-    BEQ display_maximum
-    B compare_max
-    
+
     display_maximum:
     STR R4, [R7, #0x14]
-    LDR R0, RAM_START
-    STRB R4, [R0, R5]
     
     B display_maximum_done
 
-    @ CRITICAL! Automarker will verify value displayed on LEDs here
 display_maximum_done:
 
     @ Initialise TIM6, NVIC, push buttons, ADC
 
 main_loop:
     @ If SW1: 
-    @ - Display value found in part 2
+    @ - Display last value on POT (default FF)
 	
-    SW1_held:
+    CHECK_IF_SW1_held:
 	LDR R0, GPIOA_BASE_ADDRESS
 	LDR R3, [R0, #0x10]
 	MOVS R1, #2
 	ANDS R3, R3, R1
 	CMP R3, #0
-	BEQ SW1_pressed
+	BEQ IF_SW1_pressed
     
-    @ If SW2 held:
-    @ - backup value on LEDs
-    @ - If SW2 held:
+    @ If SW0 held:
     @ -- sample POT1 and display. 
-    @ -- Loop to 2nd SW2 test
-    @ - Else: 
-    @ -- restore LEDs
     
-	SW0_held:
+	CHECK_IF_SW0_held:
 	LDR R0, GPIOA_BASE_ADDRESS
 	LDR R3, [R0, #0x10]
 	MOVS R1, #1
 	ANDS R3, R3, R1
 	CMP R3, #0
-	BEQ SW2_pressed
+	BEQ IF_SW0_pressed
 	   
     B main_loop
     
-    SW1_pressed:
-        LDR R0, RAM_START
-        LDRB R4, [R0, R5]
-        STR R4, [R7, #0x14]
-        B main_loop
+    IF_SW1_pressed:
+	LDR R0, RAM_START
+	LDRB R4, [R0]
+	STR R4, [R7, #0x14]
+	B main_loop
 		
-	SW2_pressed:
+	IF_SW0_pressed:
 	@vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 	@SETTING ADSTART
 	LDR R3, ADC_BASE_ADDRESS
@@ -343,8 +286,10 @@ main_loop:
 	
 	@READING FROM DATA REGISTER AND DISPLAYING
 	LDR R3, ADC_BASE_ADDRESS
-	LDR R2, [R3, #0x40]
-	STR R2, [R7, #0x14]
+	LDR R4, [R3, #0x40]
+	STR R4, [R7, #0x14]
+	LDR R0, RAM_START
+	STRB R4, [R0]
 @^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	B main_loop
@@ -378,6 +323,7 @@ main_loop:
     DATA_ADDR: .word DATA
     DATA_END_ADDR: .word DATA_END
     RAM_START: .word 0x20000000
+	ALL_ON: .word 0xFF
     
 @ Iterate through each of these. The automarker will modify the values at compile time,
 @ but will not alter the number of values so you can hard-code your copy loop length if you want.
