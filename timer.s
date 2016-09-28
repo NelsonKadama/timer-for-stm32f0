@@ -89,10 +89,14 @@ TIM6_Handler:
     
     @ Fetch current value on LEDs
     @ Increment it.
-    @ If it goes above 0xF8, wrap back to maximum value found in part 2.
+    @ If it reaches 0, wrap back to pot value.
     
+	LDR R0, RAM_START
+	LDRB R4, [R0]
+	LDR R7, GPIOB_BASE_ADDRESS
     STR R4, [R7, #0x14]
     SUBS R4, R4, #1
+	STRB R4, [R0]
     CMP R4, #0
     BEQ back_to_max
     
@@ -103,7 +107,8 @@ TIM6_Handler:
     
     back_to_max:
 	LDR R0, RAM_START
-	LDRB R4, [R0]
+	LDRB R4, [R0, #0x01]
+	STRB R4, [R0]
 	B wrapped
     
 _start:
@@ -218,7 +223,7 @@ adc_ready:
     @ read each byte from DATA, add 1 to it and store it to an equivalent block at the start of RAM.
 
     LDR R0, RAM_START
-	LDR R0, ALL_ON
+	LDR R4, ALL_ON
     
     to_RAM:
 	LDR R0, RAM_START
@@ -262,7 +267,7 @@ main_loop:
     
     IF_SW1_pressed:
 	LDR R0, RAM_START
-	LDRB R4, [R0]
+	LDRB R4, [R0, #0x01]
 	STR R4, [R7, #0x14]
 	B main_loop
 		
@@ -278,7 +283,7 @@ main_loop:
 	
 	eoc:											
 	LDR R3, ADC_BASE_ADDRESS
-	LDR R2, [R3, 0x00]
+	LDR R2, [R3, #0x00]
 	MOVS R5, #4
 	ANDS R2, R2, R5
 	CMP R2, #4
@@ -290,6 +295,7 @@ main_loop:
 	STR R4, [R7, #0x14]
 	LDR R0, RAM_START
 	STRB R4, [R0]
+	STRB R4, [R0, #0x01]
 @^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	B main_loop
@@ -307,7 +313,6 @@ main_loop:
     TIM6_BASE: .word 0x40001000
     TIM6_ENABLE: .word 0b10000
     PSC_VALUE: .word 0b111111111111	@4095
-    ARR_VALUE_1_5: .word 0b11110011111 @2928
     ARR_VALUE_1: .word 0b11110011111 @1951    
     ARR_VALUE_2: .word 0b111101000000 @3904
     TIM6_INTERRUPT: .WORD 0b100000000000000000
@@ -320,16 +325,5 @@ main_loop:
 	ADC_CHANNEL: .word 0b100000
 	ADC_ADSTART: .word 0b100
     
-    DATA_ADDR: .word DATA
-    DATA_END_ADDR: .word DATA_END
     RAM_START: .word 0x20000000
 	ALL_ON: .word 0xFF
-    
-@ Iterate through each of these. The automarker will modify the values at compile time,
-@ but will not alter the number of values so you can hard-code your copy loop length if you want.
-DATA:
-    .word 0xA4578911
-    .word 0x66B9543C
-    .word 0xCA71D738
-    .word 0x34CCEB44
-DATA_END:  @ this will point to the address immediately after the block. 
