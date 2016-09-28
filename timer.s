@@ -93,17 +93,26 @@ TIM6_Handler:
     
 	LDR R0, RAM_START
 	LDRB R4, [R0]
+	LDRB R1, [R0, #0x03]
 	LDR R7, GPIOB_BASE_ADDRESS
     STR R4, [R7, #0x14]
-    SUBS R4, R4, #1
-	STRB R4, [R0]
-    CMP R4, #0
-    BEQ back_to_max
+	
+	SUBS R1, R1, #1
+	STRB R1, [R0, #0x03]
+	CMP R1, #0
+	BEQ minute_up
     
 	wrapped:
     POP {PC}  @ take that return code from stack into PC, thereby telling the CPU we want to exit from the ISR
 
-    
+    minute_up:
+	MOVS R1, #60
+	STRB R1, [R0, #0x03]
+	SUBS R4, R4, #1
+	STRB R4, [R0]
+    CMP R4, #0
+    BEQ back_to_max
+	B wrapped
     
     back_to_max:
 	LDR R0, RAM_START
@@ -180,6 +189,7 @@ adc_ready:
 	LDR R2, ADC_CHANNEL
 	ORRS R1, R1, R2
 	STR R1, [R0, #0x28]
+	
 	@END POT INITIALISATION -----------------------------------------------------------------------------------------------
 	
     @ enable TIM6
@@ -220,14 +230,16 @@ adc_ready:
 	ORRS R1, R1, R2
 	STR R1, [R0, #0x00]
 
-    @ read each byte from DATA, add 1 to it and store it to an equivalent block at the start of RAM.
-
+    @ SETTING INITIAL RAM VALUES -------------------------------------------------------------------------------------------------
+	
     LDR R0, RAM_START
-	LDR R4, ALL_ON
+	LDR R4, ALL_ON	@DEFAULT LED START VALUE
     
     to_RAM:
-	LDR R0, RAM_START
-	STRB R4, [R0]
+	STRB R4, [R0]	@ALL ON 
+	MOVS R1, #60
+	STRB R1, [R0, #0x03]
+	
     
 copy_to_RAM_complete:
 
@@ -325,5 +337,9 @@ main_loop:
 	ADC_CHANNEL: .word 0b100000
 	ADC_ADSTART: .word 0b100
     
+	@EACH ADRESS TAKES 8BITS
     RAM_START: .word 0x20000000
 	ALL_ON: .word 0xFF
+	POT_VALUE_OFFSET: .word 0x01
+	FLAG_OFFSET: .word 0x02
+	COUNTER_VALUE_OFFSET: .word 0x03
