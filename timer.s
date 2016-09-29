@@ -91,11 +91,29 @@ TIM6_Handler:
     @ Increment it.
     @ If it reaches 0, wrap back to pot value.
     
+	@R0 has address of RAM
+	@R1 gets counter value
+	@R2 gets flag value
+	@R4 gets LED value	
+	
 	LDR R0, RAM_START
+	
 	LDRB R4, [R0]
 	LDRB R1, [R0, #0x03]
+	LDRB R2, [R0, #0x02]
+	
 	LDR R7, GPIOB_BASE_ADDRESS
-    STR R4, [R7, #0x14]
+	
+	CMP R2, #1			@check flag high
+	BEQ set_flag_low
+	
+	CMP R2, #0			@check flag low
+	BEQ set_flag_high
+	
+	after_flag:
+	MOVS R3, R4			@SO R4 VALUE NOT AFFECTED WHEN MINUTE IS UP
+	SUBS R3,R3,R2
+    STR R3, [R7, #0x14]	@@@@
 	
 	SUBS R1, R1, #1
 	STRB R1, [R0, #0x03]
@@ -106,7 +124,7 @@ TIM6_Handler:
     POP {PC}  @ take that return code from stack into PC, thereby telling the CPU we want to exit from the ISR
 
     minute_up:
-	MOVS R1, #60
+	MOVS R1, #10
 	STRB R1, [R0, #0x03]
 	SUBS R4, R4, #1
 	STRB R4, [R0]
@@ -120,6 +138,17 @@ TIM6_Handler:
 	STRB R4, [R0]
 	B wrapped
     
+	set_flag_low:
+	MOVS R2, #0
+	STRB R2, [R0, #0x02]
+	B after_flag
+	
+	set_flag_high:
+	MOVS R2, #1
+	STRB R2, [R0, #0x02]
+	B after_flag
+	
+	
 _start:
     @ Initliase LEDs
     
@@ -233,12 +262,14 @@ adc_ready:
     @ SETTING INITIAL RAM VALUES -------------------------------------------------------------------------------------------------
 	
     LDR R0, RAM_START
-	LDR R4, ALL_ON	@DEFAULT LED START VALUE
+	LDR R4, ALL_ON			@DEFAULT LED START VALUE
     
     to_RAM:
-	STRB R4, [R0]	@ALL ON 
-	MOVS R1, #60
-	STRB R1, [R0, #0x03]
+	STRB R4, [R0]			@ALL ON 
+	MOVS R1, #10
+	STRB R1, [R0, #0x03]	@60 sec counter
+	MOVS R2, #0
+	STRB R2, [R0, #0x02]	@Flag value
 	
     
 copy_to_RAM_complete:
@@ -343,3 +374,4 @@ main_loop:
 	POT_VALUE_OFFSET: .word 0x01
 	FLAG_OFFSET: .word 0x02
 	COUNTER_VALUE_OFFSET: .word 0x03
+	BLINKING_VALUE_OFFSET: .word 0x04
