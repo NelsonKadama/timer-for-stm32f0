@@ -99,14 +99,20 @@ TIM6_Handler:
     
 	@R0 has address of RAM
 	@R1 gets counter value
-	@R2 gets flag value
+	@R2 gets blinking flag value
+	@R3 gets timer done flag
 	@R4 gets LED value	
 	
 	LDR R0, RAM_START
 	
 	LDRB R4, [R0]
-	LDRB R1, [R0, #0x03]
 	LDRB R2, [R0, #0x02]
+	LDRB R1, [R0, #0x03]
+	LDRB R3, [R0, #0x04]
+	
+	@CHECKING IF TIMER DONE
+	CMP R3, #1
+	BEQ timer_done
 	
 	LDR R7, GPIOB_BASE_ADDRESS
 	
@@ -140,8 +146,13 @@ TIM6_Handler:
     
     back_to_max:
 	LDR R0, RAM_START
-	LDRB R4, [R0, #0x01]
-	STRB R4, [R0]
+	MOVS R3, #1
+	STRB R3, [R0, #0x04]
+	
+	@ARR for timer
+	LDR R0, TIM6_BASE
+	LDR R1, ARR_VALUE_0_01
+	STR R1, [R0, #0x2C]
 	B wrapped
     
 	set_flag_low:
@@ -153,6 +164,12 @@ TIM6_Handler:
 	MOVS R2, #1
 	STRB R2, [R0, #0x02]
 	B after_flag
+	
+	timer_done:
+	ADDS R4, R4, #1
+	STR R4, [R7, #0x14]
+	STRB R4, [R0]
+	B wrapped
 	
 	
 _start:
@@ -239,9 +256,9 @@ adc_ready:
 	LDR R1, PSC_VALUE
 	STR R1, [R0, #0x28]
 	
-	@ARR
+	@ARR for timer
 	LDR R0, TIM6_BASE
-	LDR R1, ARR_VALUE_1
+	LDR R1, ARR_VALUE_0_01
 	STR R1, [R0, #0x2C]
 	
 	@UIE
@@ -272,11 +289,13 @@ adc_ready:
     
     to_RAM:
 	STRB R4, [R0]			@ALL ON 
-	MOVS R1, #60
-	STRB R1, [R0, #0x03]	@60 sec counter
+	
 	MOVS R2, #0
 	STRB R2, [R0, #0x02]	@Flag value
-	
+	MOVS R1, #60
+	STRB R1, [R0, #0x03]	@60 sec counter
+	MOVS R2, #1
+	STRB R2, [R0, #0x04]	@timer done value
     
 copy_to_RAM_complete:
 
@@ -357,8 +376,17 @@ main_loop:
 	LDR R4, [R3, #0x40]
 	STR R4, [R7, #0x14]
 	LDR R0, RAM_START
-	STRB R4, [R0]
-	STRB R4, [R0, #0x01]
+	STRB R4, [R0]			@LED value
+	STRB R4, [R0, #0x01]	@pot value
+	
+	@ARR for timer
+	LDR R0, TIM6_BASE
+	LDR R1, ARR_VALUE_1
+	STR R1, [R0, #0x2C]
+	
+	LDR R0, RAM_START
+	MOVS R2, #0
+	STRB R2, [R0, #0x04]	@timer done value
 @^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	B main_loop
@@ -377,14 +405,14 @@ main_loop:
     TIM6_ENABLE: .word 0b10000
     PSC_VALUE: .word 0b111111111111	@4095
     ARR_VALUE_1: .word 0b11110011111 @1951    
-    ARR_VALUE_2: .word 0b111101000000 @3904
+    ARR_VALUE_0_01: .word 0b10010 @18
     TIM6_INTERRUPT: .WORD 0b100000000000000000
     NVIC_BASE: .word 0xE000E100
     A5_ENABLE: .word 0b110000000000
 	ADC_CLOCK: .word 0b1000000000
 	ADC_ENABLE: .word 0b1
 	ADC_BASE_ADDRESS: .word 0x40012400
-	ADC_ALIGN_RES: .word 0b011000	6bit resolution so its not too sensitive
+	ADC_ALIGN_RES: .word 0b011000	@6bit resolution so its not too sensitive
 	ADC_CHANNEL: .word 0b100000
 	ADC_ADSTART: .word 0b100
     
@@ -392,5 +420,6 @@ main_loop:
     RAM_START: .word 0x20000000
 	ALL_ON: .word 0xFF
 	POT_VALUE_OFFSET: .word 0x01
-	FLAG_OFFSET: .word 0x02
+	BLINKING_FLAG_OFFSET: .word 0x02
 	COUNTER_VALUE_OFFSET: .word 0x03
+	TIMER_DONE_OFFSET: .word 0x04
