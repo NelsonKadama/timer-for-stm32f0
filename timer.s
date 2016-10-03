@@ -71,21 +71,27 @@ TIM6_Handler:
 	STR R2, [R0, #0x10]
     @ END Ack the IRQ.
 	
-	@IF SWITCHED PRESSED, DONT CHANGE VALUE, EXIT TIMER
-    LDR R0, GPIOA_BASE_ADDRESS
+	@IF SWITCHE'S PRESSED, DONT CHANGE VALUE, EXIT TIMER
+    LDR R0, GPIOA_BASE_ADDRESS		@SW0
 	LDR R3, [R0, #0x10]
 	MOVS R1, #1
 	ANDS R3, R3, R1
 	CMP R3, #0
 	BEQ wrapped
 	
-	LDR R0, GPIOA_BASE_ADDRESS
+	LDR R0, GPIOA_BASE_ADDRESS		@SW1
 	LDR R3, [R0, #0x10]
 	MOVS R1, #2
 	ANDS R3, R3, R1
 	CMP R3, #0
 	BEQ wrapped
     
+	LDR R0, GPIOA_BASE_ADDRESS		@SW2
+	LDR R3, [R0, #0x10]
+	MOVS R1, #4
+	ANDS R3, R3, R1
+	CMP R3, #0
+	BEQ wrapped
     
     @ Fetch current value on LEDs
     @ Increment it.
@@ -124,7 +130,7 @@ TIM6_Handler:
     POP {PC}  @ take that return code from stack into PC, thereby telling the CPU we want to exit from the ISR
 
     minute_up:
-	MOVS R1, #10
+	MOVS R1, #60
 	STRB R1, [R0, #0x03]
 	SUBS R4, R4, #1
 	STRB R4, [R0]
@@ -266,7 +272,7 @@ adc_ready:
     
     to_RAM:
 	STRB R4, [R0]			@ALL ON 
-	MOVS R1, #10
+	MOVS R1, #60
 	STRB R1, [R0, #0x03]	@60 sec counter
 	MOVS R2, #0
 	STRB R2, [R0, #0x02]	@Flag value
@@ -284,9 +290,18 @@ display_maximum_done:
     @ Initialise TIM6, NVIC, push buttons, ADC
 
 main_loop:
+    @ If SW0 held:
+    @ -- sample POT0 and set timer. 
+	CHECK_IF_SW0_held:
+	LDR R0, GPIOA_BASE_ADDRESS
+	LDR R3, [R0, #0x10]
+	MOVS R1, #1
+	ANDS R3, R3, R1
+	CMP R3, #0
+	BEQ IF_SW0_pressed
+
     @ If SW1: 
-    @ - Display last value on POT (default FF)
-	
+    @ - Display value on POT (default FF)
     CHECK_IF_SW1_held:
 	LDR R0, GPIOA_BASE_ADDRESS
 	LDR R3, [R0, #0x10]
@@ -295,22 +310,27 @@ main_loop:
 	CMP R3, #0
 	BEQ IF_SW1_pressed
     
-    @ If SW0 held:
-    @ -- sample POT1 and display. 
-    
-	CHECK_IF_SW0_held:
+    @ If SW2: 
+    @ - Display timer position/value. Used to clear confusion of blinking LED
+    CHECK_IF_SW2_held:
 	LDR R0, GPIOA_BASE_ADDRESS
 	LDR R3, [R0, #0x10]
-	MOVS R1, #1
+	MOVS R1, #4
 	ANDS R3, R3, R1
 	CMP R3, #0
-	BEQ IF_SW0_pressed
+	BEQ IF_SW2_pressed
 	   
     B main_loop
     
     IF_SW1_pressed:
 	LDR R0, RAM_START
 	LDRB R4, [R0, #0x01]
+	STR R4, [R7, #0x14]
+	B main_loop
+		
+	IF_SW2_pressed:
+	LDR R0, RAM_START
+	LDRB R4, [R0]
 	STR R4, [R7, #0x14]
 	B main_loop
 		
@@ -351,7 +371,7 @@ main_loop:
     GPIOA_BASE_ADDRESS: .word 0x48000000
     LED_ENABLE: .word 0b0101010101010101
     
-    SWITCH_ENABLE: .word 0b0101
+    SWITCH_ENABLE: .word 0b01010101
     
     TIM6_BASE: .word 0x40001000
     TIM6_ENABLE: .word 0b10000
@@ -364,7 +384,7 @@ main_loop:
 	ADC_CLOCK: .word 0b1000000000
 	ADC_ENABLE: .word 0b1
 	ADC_BASE_ADDRESS: .word 0x40012400
-	ADC_ALIGN_RES: .word 0b010000
+	ADC_ALIGN_RES: .word 0b011000	6bit resolution so its not too sensitive
 	ADC_CHANNEL: .word 0b100000
 	ADC_ADSTART: .word 0b100
     
